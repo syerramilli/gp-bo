@@ -7,9 +7,9 @@ from botorch.models.gpytorch import GPyTorchModel
 from botorch.models.transforms.outcome import Standardize
 
 from gpytorch.constraints import GreaterThan,Positive,Interval
-from gpytorch.priors import NormalPrior,LogNormalPrior,HalfCauchyPrior
+from gpytorch.priors import NormalPrior,LogNormalPrior
 
-from .priors import MollifiedUniformPrior
+from .priors import HalfCauchyPrior,MollifiedUniformPrior
 
 class GPR(ExactGP,GPyTorchModel):
     _num_outputs=1 # needed for botorch functions
