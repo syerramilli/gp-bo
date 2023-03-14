@@ -10,6 +10,7 @@ from gpytorch.constraints import GreaterThan,Positive
 from gpytorch.priors import NormalPrior,LogNormalPrior,GammaPrior
 
 from .priors import HalfCauchyPrior,MollifiedUniformPrior
+from .warp import InputWarp
 
 def exp_with_shift(x:torch.Tensor):
     return 1e-6+x.exp()
@@ -20,7 +21,8 @@ class GPR(ExactGP,GPyTorchModel):
     def __init__(
         self,
         train_x:torch.Tensor,
-        train_y:torch.Tensor
+        train_y:torch.Tensor,
+        warp_input:bool=False
     ) -> None:
     
         # initializing likelihood
@@ -36,6 +38,10 @@ class GPR(ExactGP,GPyTorchModel):
 
         # register outcome transform
         self.outcome_transform = outcome_transform
+
+        # check if input warping is neeed
+        if warp_input:
+            self.input_transform = InputWarp(indices=list(range(train_x.shape[-1])))
 
         # Modules
         self.mean_module = gpytorch.means.ConstantMean()
