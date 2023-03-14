@@ -6,10 +6,13 @@ from gpytorch.models import ExactGP
 from botorch.models.gpytorch import GPyTorchModel
 from botorch.models.transforms.outcome import Standardize
 
-from gpytorch.constraints import GreaterThan,Positive,Interval
-from gpytorch.priors import NormalPrior,LogNormalPrior
+from gpytorch.constraints import GreaterThan,Positive
+from gpytorch.priors import NormalPrior,LogNormalPrior,GammaPrior
 
 from .priors import HalfCauchyPrior,MollifiedUniformPrior
+
+def exp_with_shift(x:torch.Tensor):
+    return 1e-6+x.exp()
 
 class GPR(ExactGP,GPyTorchModel):
     _num_outputs=1 # needed for botorch functions
@@ -21,7 +24,9 @@ class GPR(ExactGP,GPyTorchModel):
     ) -> None:
     
         # initializing likelihood
-        likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        likelihood = gpytorch.likelihoods.GaussianLikelihood(
+            constraints=GreaterThan(1e-6,transform=torch.exp,inv_transform=torch.log)
+        )
 
         outcome_transform = Standardize(1)
         train_y_sc,_ = outcome_transform(train_y.unsqueeze(-1))
@@ -44,11 +49,11 @@ class GPR(ExactGP,GPyTorchModel):
         )  
 
         # register priors
-        self.likelihood.register_prior('noise_prior',HalfCauchyPrior(0.1),'noise')
+        self.likelihood.register_prior('noise_prior',HalfCauchyPrior(0.1,transform=exp_with_shift),'raw_noise')
         self.mean_module.register_prior('mean_prior',NormalPrior(0.,1.),'constant')
         self.covar_module.register_prior('outputscale_prior',LogNormalPrior(0.,1.),'outputscale')
         self.covar_module.base_kernel.register_prior(
-            'lengthscale_prior',MollifiedUniformPrior(math.log(0.01),math.log(10.)),'raw_lengthscale'
+            'lengthscale_prior',GammaPrior(3/2, 3.9/6),'lengthscale'
         )
     
     def forward(self,x):
