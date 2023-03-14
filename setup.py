@@ -13,4 +13,8 @@ setup(name='gp_bo',
       license='BSD 3-Clause License',
       packages=find_packages(),
       install_requires=['numpy','scipy','gpytorch','botorch','ConfigSpace'],
-      zip_safe=False)
+      extras_require={
+            'optuna': ['optuna']
+      },
+      zip_safe=False
+)
