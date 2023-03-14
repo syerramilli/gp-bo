@@ -31,7 +31,7 @@ def gp_ei_candidates_func(
     '''
     train_x = normalize(train_x, bounds=bounds)
     
-    model = GPR(train_x,train_y.squeeze(-1)).double()
+    model = GPR(train_x,train_y.squeeze(-1),warp_input=True).double()
     
     # fit model
     _ = fit_model_scipy(model,num_restarts=5)

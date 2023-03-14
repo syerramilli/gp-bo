@@ -40,8 +40,9 @@ class GPR(ExactGP,GPyTorchModel):
         self.outcome_transform = outcome_transform
 
         # check if input warping is neeed
-        if warp_input:
-            self.input_transform = InputWarp(indices=list(range(train_x.shape[-1])))
+        self.register_buffer('warp_input',torch.tensor(warp_input))
+        if self.warp_input:
+            self.input_warping = InputWarp(input_dim = train_x.shape[-1])
 
         # Modules
         self.mean_module = gpytorch.means.ConstantMean()
@@ -64,7 +65,7 @@ class GPR(ExactGP,GPyTorchModel):
     
     def forward(self,x):
         mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
+        covar_x = self.covar_module(self.input_warping(x) if self.warp_input else x)
         return gpytorch.distributions.MultivariateNormal(mean_x,covar_x)
     
     def reset_parameters(self):
