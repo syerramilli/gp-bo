@@ -16,6 +16,16 @@ def exp_with_shift(x:torch.Tensor):
     return 1e-6+x.exp()
 
 class GPR(ExactGP,GPyTorchModel):
+    '''
+    Gaussian Process Regression model with Matern kernel and Gaussian likelihood
+
+    Args:
+        train_x (torch.Tensor): training input data
+        train_y (torch.Tensor): training output data
+        warp_input (bool): whether to use input warping or not. If True, uses the 
+            Kumaraswamy cdf as a monotonic transformation of the input data to
+            account for any possible non-stationarities. Default is False.
+    '''
     _num_outputs=1 # needed for botorch functions
 
     def __init__(
@@ -76,7 +86,16 @@ class GPR(ExactGP,GPyTorchModel):
                 continue
             setting_closure(module,prior.expand(closure(module).shape).sample())
 
-    def predict(self,x,return_std=False):
+    def predict(self, x:torch.Tensor, return_std:bool=False):
+        '''
+        Convenience function that returns the posterior mean and 
+        standard deviation of the response at locations specified by x.
+
+        Args:
+            x (torch.Tensor): input locations with shape (n_samples, input_dim)
+            return_std (bool): whether to return the standard deviation or not. 
+                If True, returns a tuple of (mean, std). Default is False.
+        '''
         self.eval()
 
         out_dist = self.posterior(x).mvn

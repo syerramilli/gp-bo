@@ -21,6 +21,39 @@ from collections import OrderedDict
 from copy import deepcopy
 
 class BayesOpt:
+    '''
+    Class for Bayesian Optimization using Gaussian Processes as the surrogate
+    model.
+
+    Args:
+        obj (Callable): objective function to be optimized. The function signature
+            should be of the form obj(conf:Dict)->float, where conf 
+            is a dictionary of variables to optimizer over
+        config (ConfigurationSpace): configuration space object that contains
+            the type of variables (numerical/ integer with or without log transform) 
+            to optimize over and their respective bounds. This will be used internally
+            for generating the initial candidates and for transforming the variables
+            to a space that is suitable for the surrogate model.
+        minimize (bool): whether to minimize or maximize the objective function. If
+            True, the surrogate model will be trained to predict the negative of the
+            objective function. Default is True.
+        acq_function (str): acquisition function to be used. Currently, only Expected
+            Improvement (EI) is supported.
+        acq_function_options (Dict): options for the acquisition function. For EI,
+            this is not used.
+        batch_acquisition (bool): whether to use batch acquisition or not. If True,
+            the next candidate will be selected by optimizing the acquisition function
+            over a batch of points. Default is False.
+        acquisition_q (int): number of points to optimize the acquisition function over
+            if batch_acquisition is True. Default is 1.
+        verbose (int): verbosity level. If 0, no output will be printed. If 1, only
+            the final incumbent and the objective value at the incumbent will be printed.
+            If 2, the acquisition value at each iteration will also be printed. Default is 1.
+        save_iter (int): if not None, the optimization statistics will be saved to a file
+            every save_iter iterations. Default is None.
+        save_dir (str): directory to save the optimization statistics. Default is None.
+        n_jobs (int): number of parallel jobs to run. This is currently not supported.
+    '''
     def __init__(
         self,
         obj:Callable,
@@ -64,7 +97,22 @@ class BayesOpt:
         self.obj_eval_time = []
         self.initial_params = None
     
-    def run(self,n_iter:int,n_init:Optional[int]=None) -> Dict:
+    def run(self, n_iter:int, n_init:Optional[int]=None) -> Dict:
+        '''
+        Run the Bayesian Optimization algorithm for n_iter iterations.
+
+        If the algorithm is run for the first time, the initial candidates will be
+        generated using a Latin Hypercube Sampling design. Use `n_init` to specify
+        the number of initial candidates to generate. If the algorithm has been run
+        previously, the algorithm will continue from the last iteration.
+
+        Args:
+            n_iter (int): number of iterations to run the algorithm for.
+            n_init (int): number of initial candidates to generate. Used only if the
+                algorithm is run for the first time. If None, the number of initial
+                candidates will be equal to the number of variables in the configuration
+                space plus one.
+        '''
 
         # output_header = '%6s %10s %10s %10s %12s' % \
         #             ('iter', 'f_inc_obs', 'f_inc_est','acq_cand',"term_metric")
@@ -118,6 +166,14 @@ class BayesOpt:
         return results
 
     def save_to_file(self,folder):
+        '''
+        Save optimization statistics, observations and model state inside
+        the specified directory. The file names inside the directory are
+        'stats.pkl', 'model_train.pt' and 'model_state.pth' respectively.
+
+        Args:
+            folder (str): directory to save the optimization statistics.
+        '''
         #  optimization statistics
         stat_keys = [
             'f_inc_obs','f_inc_est','acq_vec',
