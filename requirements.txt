@@ -1,6 +1,6 @@
-numpy
-scipy
-torch
-gpytorch
-botorch
-ConfigSpace
+numpy>=1.20
+scipy>=1.10
+torch>=1.13
+gpytorch>=1.9
+botorch>=0.8
+ConfigSpace>=0.7

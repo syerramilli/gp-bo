@@ -14,7 +14,7 @@ setup(name='gp_bo',
       packages=find_packages(),
       install_requires=['numpy','scipy','gpytorch','botorch','ConfigSpace'],
       extras_require={
-            'optuna': ['optuna']
+            'optuna': ['optuna'],
       },
       zip_safe=False
 )
