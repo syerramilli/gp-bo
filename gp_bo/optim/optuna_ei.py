@@ -3,7 +3,7 @@ import torch
 from ..models import GPR
 from ..fit.mll_scipy import fit_model_scipy
 
-from botorch.acquisition import ExpectedImprovement
+from botorch.acquisition import LogExpectedImprovement
 from botorch.utils.transforms import normalize,unnormalize
 from botorch.optim import optimize_acqf
 from botorch.utils.sampling import manual_seed
@@ -38,14 +38,14 @@ def gp_ei_candidates_func(
     '''
     train_x = normalize(train_x, bounds=bounds)
     
-    model = GPR(train_x,train_y.squeeze(-1),warp_input=True).double()
+    model = GPR(train_x, train_y.squeeze(-1),warp_input=True).double()
     
     # fit model
-    _ = fit_model_scipy(model,num_restarts=5)
+    _ = fit_model_scipy(model, num_restarts=4)
     
     # acquistion function
     best_f = train_y.max()
-    acq = ExpectedImprovement(model,best_f=best_f).double()
+    acq = LogExpectedImprovement(model,best_f=best_f).double()
     standard_bounds = torch.zeros_like(bounds)
     standard_bounds[1] = 1
     
@@ -53,8 +53,8 @@ def gp_ei_candidates_func(
         acq_function=acq,
         bounds=standard_bounds,
         q=1,
-        num_restarts=20,
-        raw_samples=200
+        num_restarts=10,
+        raw_samples=100
     )
     
     candidates = unnormalize(candidates.detach(), bounds=bounds)
@@ -77,16 +77,19 @@ class UnconstrainedGPEISampler(BaseSampler):
         n_startup_trials (int): Number of initial random trials before using the GP model.
             Default is 10.
         seed (int): Random seed for the sampler. Default is None.
+        independent_sampler (optuna.samplers.BaseSampler): An independent sampler to use for the 
+            initial trials. If not specified, :class:`~optuna.samplers.QMCSampler` is used.
     '''
     def __init__(
         self,
         n_startup_trials: int = 10,
         seed: Optional[int] = None,
+        independent_sampler: Optional[BaseSampler] = None
     ):
         self._candidates_func = gp_ei_candidates_func
         self._constraints_func = None
         self._n_startup_trials = n_startup_trials
-        self._independent_sampler = QMCSampler(seed=seed)
+        self._independent_sampler = independent_sampler or QMCSampler(seed=seed)
         self._seed = seed
         
         self._study_id = None
