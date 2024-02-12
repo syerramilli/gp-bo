@@ -25,9 +25,16 @@ def gp_ei_candidates_func(
     train_x:torch.Tensor,train_y:torch.Tensor,bounds:torch.Tensor
 ) -> torch.Tensor:
     '''
-    For the given data, fits a Gaussian Process model and then 
-    computes the next candidate to try through optimizing 
-    Expected Improvement
+    For the given data, fits a Gaussian Process model and then computes the next candidate 
+    to try through optimizing Expected Improvement
+
+    .. note::
+        This assumes that the observations are noise-free.
+    
+    Args:
+        train_x (torch.Tensor): training input data (n x d)
+        train_y (torch.Tensor): training output data (n x 1)
+        bounds (torch.Tensor): bounds of the input space (d x 2)
     '''
     train_x = normalize(train_x, bounds=bounds)
     
@@ -57,18 +64,19 @@ def gp_ei_candidates_func(
 
 class UnconstrainedGPEISampler(BaseSampler):
     '''
-    Optuna sampler interface that uses GP-based BO to generate the next trial
-    for unconstrained single objective optimization problems. This is based on
-    `optuna.integration.BoTorchSampler`.
+    Optuna sampler interface that uses GP-based BO to generate the next trial for unconstrained 
+    single objective optimization problems. This is based on `optuna.integration.BoTorchSampler`.
 
     Parameters are transformed to continuous space before passing to the GP interface, and then
     transformed back to Optuna's representations. Categorical parameters are one-hot encoded.
 
-    :param n_startup_trials: Number of initial trials drawn using QMC sampling
-    :type n_startup_trials: int
-
-    :param seed: Seed for random number generator
-    :type seed: Optional[int]
+    .. note::
+        This sampler is meant       
+    
+    Args:
+        n_startup_trials (int): Number of initial random trials before using the GP model.
+            Default is 10.
+        seed (int): Random seed for the sampler. Default is None.
     '''
     def __init__(
         self,
