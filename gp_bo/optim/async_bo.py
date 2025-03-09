@@ -1,11 +1,8 @@
 import asyncio
 import numpy as np
-import os 
+import os
 import time
 import torch
-import gpytorch
-import warnings
-import joblib
 
 from ..models import GPR
 from ..fit.mll_scipy import fit_model_scipy
@@ -22,6 +19,9 @@ from typing import Callable,List,Union,Tuple,Optional,Dict
 from collections import OrderedDict
 from copy import deepcopy
 
+import nest_asyncio
+nest_asyncio.apply()  # Ensures nested event loops work in Jupyter notebooks
+
 class AsyncBayesOpt:
     def __init__(
         self,
@@ -29,8 +29,8 @@ class AsyncBayesOpt:
         config:Space,
         minimize:bool=True,
         n_initial:Optional[int]=None,
-        n_parallel:int=1,
-        execution_mode:str='local',
+        n_batch:int=1,
+        use_local_parallelism: bool = False,
         refresh_rate:int=0.5,
         verbose:int=1
     ):
@@ -41,9 +41,9 @@ class AsyncBayesOpt:
 
         self.n_initial = n_initial if n_initial is not None else len(self.config.ndim)+1
         
-        self.n_parallel = n_parallel
-        self.execution_mode = execution_mode
-        self.executor = ProcessPoolExecutor(max_workers=self.n_parallel) if self.execution_mode == 'local' else None
+        self.n_batch = n_batch
+        self.use_local_parallelism = use_local_parallelism
+        self.executor = ProcessPoolExecutor(max_workers=self.n_batch) if self.use_local_parallelism else None
         self.refresh_rate = refresh_rate
         self.verbose=verbose
 
@@ -61,6 +61,67 @@ class AsyncBayesOpt:
             n=self.n_initial, q=1
         ).squeeze(0)
         self._init_trial_idx = -1
+
+    def run_trials(self, n_trials:int):
+        # Start overall timer
+        self.start_time = time.time()
+        try:
+            loop = asyncio.get_running_loop()  # Get the current event loop (Jupyter case)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()  # If no event loop exists, create one
+            asyncio.set_event_loop(loop)
+
+        best_conf, best_value = loop.run_until_complete(self._run(n_trials))
+        return best_conf, best_value
+    
+    def get_trials_dataframe(self):
+        """Returns a pandas DataFrame with the trial metadata."""
+        import pandas as pd
+        return pd.DataFrame.from_dict(self.trial_meta, orient="index").sort_values('end_time')
+
+    def get_incumbent_vs_trials(self):
+        """Returns a list of the best incumbent values over the number of completed trials."""
+        if not hasattr(self, "train_y") or len(self.train_y) == 0:
+            raise ValueError("No completed trials yet.")
+
+        incumbent_values = []
+        best_so_far = float('-inf') if not self.minimize else float('inf')
+
+        for i in range(len(self.train_y)):
+            best_so_far = max(best_so_far, self.train_y[i].item()) if not self.minimize else min(best_so_far, -self.train_y[i].item())
+            incumbent_values.append(best_so_far)
+
+        return incumbent_values
+
+    def get_incumbent_vs_time(self):
+        """Returns a list of timestamps and the best incumbent values over elapsed time.
+        
+        Ensures trials are processed in chronological order of completion.
+        """
+        if not hasattr(self, "train_y") or len(self.train_y) == 0:
+            raise ValueError("No completed trials yet.")
+
+        # Collect (end_time, value) for completed trials
+        completed_trials = [
+            (self.trial_meta[trial_id]["end_time"] - self.start_time, self.trial_meta[trial_id]["value"])
+            for trial_id in self.trial_meta
+            if "end_time" in self.trial_meta[trial_id]
+        ]
+
+        # Sort by end time to process in correct order
+        completed_trials.sort(key=lambda x: x[0])
+
+        # Track best incumbent value dynamically
+        incumbent_values = []
+        time_stamps = []
+        best_so_far = float('-inf') if not self.minimize else float('inf')
+
+        for elapsed_time, value in completed_trials:
+            best_so_far = max(best_so_far, value) if not self.minimize else min(best_so_far, value)
+            incumbent_values.append(best_so_far)
+            time_stamps.append(elapsed_time)
+
+        return time_stamps, incumbent_values
 
     async def update_model(self):
         async with self.model_lock:
@@ -100,7 +161,14 @@ class AsyncBayesOpt:
     async def evaluate(self, x:torch.Tensor, trial_id:int):
         conf = self.config.get_dict_from_array(x.numpy().ravel())
         loop = asyncio.get_event_loop()
+
+        self.trial_meta[trial_id]['start_time'] = time.time()
         result = await loop.run_in_executor(self.executor, self.obj, conf)
+        # Log trial completion time
+        self.trial_meta[trial_id]['end_time'] = time.time()
+        self.trial_meta[trial_id]['duration'] = (
+            self.trial_meta[trial_id]['end_time'] - self.trial_meta[trial_id]['start_time']
+        )
 
         if self.verbose >= 2:
             print(f"Trial {trial_id} with config {conf} completed with value={result}")
@@ -116,13 +184,12 @@ class AsyncBayesOpt:
         if len(self.train_x) >= self.n_initial: # ensure all initial confs are evaluated
             await self.update_model()
     
-
-    async def run(self, n_trials:int):
+    async def _run(self, n_trials:int):
         trial_count = 0
-
+        
         try:
             while trial_count < n_trials or self.pending_trials:
-                while len(self.pending_trials) < self.n_parallel and trial_count < n_trials:
+                while len(self.pending_trials) < self.n_batch and trial_count < n_trials:
                     x_next, source = None, None
                     while x_next is None:
                         x_next, source = await self.suggest_next()
@@ -145,3 +212,5 @@ class AsyncBayesOpt:
         if self.verbose >= 1:    
             print(f'Best configuration found: {self.best_conf}')
             print(f'Best value: {self.best_value}')
+
+        return self.best_conf, self.best_value
