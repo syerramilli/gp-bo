@@ -6,10 +6,10 @@ from gpytorch.models import ExactGP
 from botorch.models.gpytorch import GPyTorchModel
 from botorch.models.transforms.outcome import Standardize
 
-from gpytorch.constraints import GreaterThan,Positive
-from gpytorch.priors import NormalPrior,LogNormalPrior,GammaPrior
+from gpytorch.constraints import GreaterThan, Positive
+from gpytorch.priors import NormalPrior,LogNormalPrior, GammaPrior
 
-from .priors import HalfCauchyPrior,MollifiedUniformPrior
+from .priors import HalfCauchyPrior
 from .warp import InputWarp
 
 def exp_with_shift(x:torch.Tensor):
@@ -40,11 +40,11 @@ class GPR(ExactGP,GPyTorchModel):
             constraints=GreaterThan(1e-6,transform=torch.exp,inv_transform=torch.log)
         )
 
-        outcome_transform = Standardize(1)
-        train_y_sc,_ = outcome_transform(train_y.unsqueeze(-1))
+        outcome_transform = Standardize(1, batch_shape=train_y.shape[:-2])
+        train_y_sc,_ = outcome_transform(train_y)
 
         # initializing ExactGP
-        super().__init__(train_x,train_y_sc.squeeze(-1),likelihood)
+        super().__init__(train_x,train_y_sc.squeeze(-1), likelihood)
 
         # register outcome transform
         self.outcome_transform = outcome_transform
