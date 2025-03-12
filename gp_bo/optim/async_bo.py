@@ -1,9 +1,7 @@
 import asyncio
-import numpy as np
-import os
 import time
 import torch
-
+import pandas as pd
 from ..models import GPR
 from ..fit.mll_scipy import fit_model_scipy
 from ..space.space import Space
@@ -15,9 +13,8 @@ from botorch.utils.sampling import draw_sobol_samples
 
 from concurrent.futures import ProcessPoolExecutor
 
-from typing import Callable,List,Union,Tuple,Optional,Dict
-from collections import OrderedDict
-from copy import deepcopy
+from typing import Callable,List,Tuple,Optional,Dict
+from numbers import Number
 
 import nest_asyncio
 nest_asyncio.apply()  # Ensures nested event loops work in Jupyter notebooks
@@ -62,7 +59,7 @@ class AsyncBayesOpt:
         ).squeeze(0)
         self._init_trial_idx = -1
 
-    def run_trials(self, n_trials:int):
+    def run_trials(self, n_trials:int) -> Tuple[Dict[str,Number],Number]:
         # Start overall timer
         self.start_time = time.time()
         try:
@@ -74,12 +71,15 @@ class AsyncBayesOpt:
         best_conf, best_value = loop.run_until_complete(self._run(n_trials))
         return best_conf, best_value
     
-    def get_trials_dataframe(self):
+    def get_trials_dataframe(self) -> pd.DataFrame:
         """Returns a pandas DataFrame with the trial metadata."""
-        import pandas as pd
-        return pd.DataFrame.from_dict(self.trial_meta, orient="index").sort_values('end_time')
+        df = pd.DataFrame.from_dict(self.trial_meta, orient="index").sort_values('end_time')
+        conf_df = pd.json_normalize(df["conf"])  # Expands dictionary values into columns
+        df = df.drop(columns=["conf"]).reset_index(drop=True)
+        df = pd.concat([df, conf_df], axis=1)
+        return df 
 
-    def get_incumbent_vs_trials(self):
+    def get_incumbent_vs_trials(self) -> List[Number]:
         """Returns a list of the best incumbent values over the number of completed trials."""
         if not hasattr(self, "train_y") or len(self.train_y) == 0:
             raise ValueError("No completed trials yet.")
@@ -93,7 +93,7 @@ class AsyncBayesOpt:
 
         return incumbent_values
 
-    def get_incumbent_vs_time(self):
+    def get_incumbent_vs_time(self) -> Tuple[List[Number],List[Number]]:
         """Returns a list of timestamps and the best incumbent values over elapsed time.
         
         Ensures trials are processed in chronological order of completion.
