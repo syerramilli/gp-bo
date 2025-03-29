@@ -73,9 +73,9 @@ class AsyncBayesOpt:
     
     def get_trials_dataframe(self) -> pd.DataFrame:
         """Returns a pandas DataFrame with the trial metadata."""
-        df = pd.DataFrame.from_dict(self.trial_meta, orient="index").sort_values('end_time')
+        df = pd.DataFrame.from_dict(self.trial_meta, orient="index")
         conf_df = pd.json_normalize(df["conf"])  # Expands dictionary values into columns
-        df = df.drop(columns=["conf"]).reset_index(drop=True)
+        df = df.drop(columns=["conf"])
         df = pd.concat([df, conf_df], axis=1)
         return df 
 
